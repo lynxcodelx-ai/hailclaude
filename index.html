@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-healing automation console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#17212b;--paper:#edf1f0;--panel:#fff;--line:#cbd5d3;--ok:#0e8c78;--bad:#d2403a;--wait:#b97a08;--mute:#5d6b73;
+--sans:"Bricolage Grotesque",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.5 var(--sans)}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 64px}
+.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between}
+h1{font:800 clamp(28px,4.2vw,46px)/1.05 var(--sans);letter-spacing:-.02em;margin:0}
+.sub{color:var(--mute);margin:8px 0 0;max-width:48ch}
+.stats{display:flex;gap:28px}
+.stat b{display:block;font:800 34px/1 var(--sans)}
+.stat span{font-size:14px;color:var(--mute)}
+.pulse{margin:22px 0 28px;background:var(--panel);border:1.5px solid var(--ink);border-radius:10px;position:relative;overflow:hidden}
+.pulse canvas{display:block;width:100%;height:92px}
+.pulse p{position:absolute;left:0;top:10px;margin:0;font-weight:600;padding:0 12px 0 16px;background:var(--panel)}
+.mode{position:absolute;right:0;top:10px;margin:0;font-size:13px;color:var(--mute);padding:0 16px 0 12px;background:var(--panel)}
+.grid{display:grid;grid-template-columns:290px 1fr;gap:28px;align-items:start}
+h2{font:600 18px/1.2 var(--sans);margin:0 0 12px}
+.act{display:block;width:100%;text-align:left;background:var(--panel);border:1.5px solid var(--ink);border-radius:8px;padding:11px 14px;margin:0 0 10px;font:inherit;color:inherit;cursor:pointer}
+.act:hover{background:#e0f0ed}
+.act b{display:block;font-weight:600}
+.act span{font-size:14px;color:var(--mute)}
+.reset{background:none;border:0;font:inherit;color:var(--mute);text-decoration:underline;cursor:pointer;padding:4px 0}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.empty{border:1.5px dashed var(--line);border-radius:8px;padding:28px;color:var(--mute)}
+.inc{background:var(--panel);border:1.5px solid var(--line);border-left:7px solid var(--c);border-radius:8px;padding:16px 18px;margin:0 0 18px;--c:var(--bad)}
+.s-healed{--c:var(--ok)}.s-awaiting_approval{--c:var(--wait)}.s-escalated{--c:var(--ink)}
+.inc header{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.inc h3{font:600 19px/1.2 var(--sans);margin:0}
+.id{font:400 13px var(--mono);color:var(--mute)}
+.badge{margin-left:auto;background:var(--c);color:#fff;font-size:13px;font-weight:600;padding:2px 10px;border-radius:99px}
+.tl{list-style:none;margin:12px 0;padding:0}
+.tl li{display:grid;grid-template-columns:68px 1fr;gap:10px;padding:3px 0;font-size:15px}
+.tl time{font:400 12.5px/1.8 var(--mono);color:var(--mute)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+h4{font:600 14px/1.2 var(--sans);margin:4px 0 0}
+.cols p{font-size:14px;color:var(--mute);margin:2px 0 0}
+pre{font:400 12.5px/1.5 var(--mono);background:#f4f7f6;border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;margin:6px 0 0}
+.bar{display:flex;gap:10px;margin-top:14px}
+.bar button{font:600 15px var(--sans);padding:9px 18px;border-radius:8px;cursor:pointer;border:1.5px solid var(--ink)}
+.yes{background:var(--ok);color:#fff;border-color:var(--ok)!important}
+.no{background:var(--panel);color:var(--ink)}
+@media(max-width:860px){.grid,.cols{grid-template-columns:1fr}.mode{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Self-healing automation console</h1>
+      <p class="sub">Break the order pipeline, then watch the system find the cause, patch it, and retry.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="s-delivered">0</b><span>Orders delivered</span></div>
+      <div class="stat"><b id="s-healed">0</b><span>Self-healed</span></div>
+      <div class="stat"><b id="s-escalated">0</b><span>Escalated</span></div>
+    </div>
+  </div>
+
+  <div class="pulse" role="status">
+    <canvas id="wave" aria-hidden="true"></canvas>
+    <p id="plabel">Pipeline healthy</p>
+    <p class="mode" id="mode"></p>
+  </div>
+
+  <div class="grid">
+    <aside>
+      <h2>Break the pipeline</h2>
+      <button class="act" onclick="post('/api/inject/healthy')"><b>Send a healthy order</b><span>Flows straight through</span></button>
+      <button class="act" onclick="post('/api/inject/schema_drift')"><b>Rename fields upstream</b><span>id and client.fullName replace the expected names</span></button>
+      <button class="act" onclick="post('/api/inject/bad_type')"><b>Send amount as text</b><span>The amount arrives as “₹1,234.50”</span></button>
+      <button class="act" onclick="post('/api/inject/missing_field')"><b>Drop the currency field</b><span>The fix needs your approval</span></button>
+      <button class="act" onclick="post('/api/inject/rate_limit')"><b>Throttle the CRM</b><span>The API answers 429 three times</span></button>
+      <button class="reset" onclick="post('/api/reset')">Clear all incidents</button>
+    </aside>
+    <main id="list"></main>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const TITLES={schema_drift:"Upstream renamed fields",bad_type:"Amount arrived as text",missing_field:"Currency field missing",rate_limit:"CRM throttled requests"};
+const LABELS={detected:"Failure detected",diagnosed:"Diagnosed",patched:"Patching and retrying",awaiting_approval:"Needs your approval",healed:"Healed",escalated:"Escalated"};
+const COL={ok:"#0e8c78",fail:"#d2403a",dead:"#d2403a",wait:"#b97a08"};
+const TEXT={ok:"Pipeline healthy",fail:"Failure detected, healing in progress",wait:"Paused, waiting for your approval",dead:"Run failed and was escalated to an admin"};
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+let last="",health="ok",ph=0;
+
+function ecg(p){
+  if(p>.08&&p<.16)return .15*Math.sin((p-.08)/.08*Math.PI);
+  if(p>.2&&p<.23)return -.2*Math.sin((p-.2)/.03*Math.PI);
+  if(p>=.23&&p<.28)return Math.sin((p-.23)/.05*Math.PI);
+  if(p>=.28&&p<.32)return -.35*Math.sin((p-.28)/.04*Math.PI);
+  if(p>.45&&p<.6)return .28*Math.sin((p-.45)/.15*Math.PI);
+  return 0;
+}
+const cv=$("#wave"),cx=cv.getContext("2d");
+function draw(){
+  const d=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  if(cv.width!==Math.round(w*d)){cv.width=Math.round(w*d);cv.height=Math.round(h*d)}
+  cx.setTransform(d,0,0,d,0,0);cx.clearRect(0,0,w,h);
+  cx.strokeStyle=COL[health];cx.lineWidth=2.5;cx.lineJoin="round";cx.beginPath();
+  for(let x=0;x<=w;x+=2){
+    let v=0;
+    if(health==="ok")v=ecg(((x+ph)%180)/180);
+    else if(health==="wait")v=.3*ecg(((x+ph)%360)/360);
+    else if(health==="fail")v=(Math.random()-.5)*.6;
+    const y=h*.66-v*h*.5;
+    x?cx.lineTo(x,y):cx.moveTo(x,y);
+  }
+  cx.stroke();
+  if(!reduce){ph+=2.5;requestAnimationFrame(draw)}
+}
+
+function incident(i){
+  const tl=i.timeline.map(e=>`<li><time>${e.t}</time><span>${esc(e.msg)}</span></li>`).join("");
+  const patch=i.patch?`<section><h4>Patch</h4><p>${esc(i.patch.explanation)} (${esc(i.patch.source)})</p><pre>${esc(JSON.stringify(i.patch.ops,null,2))}</pre></section>`:"";
+  const before=`<h4>Failed payload</h4><pre>${esc(JSON.stringify(i.payload,null,2))}</pre>`;
+  const after=i.payload_after?`<h4 style="margin-top:10px">Delivered payload</h4><pre>${esc(JSON.stringify(i.payload_after,null,2))}</pre>`:"";
+  const bar=i.approval_needed?`<div class="bar"><button class="yes" onclick="post('/api/incidents/${i.id}/approve')">Approve patch and retry</button><button class="no" onclick="post('/api/incidents/${i.id}/reject')">Reject and escalate</button></div>`:"";
+  return `<article class="inc s-${i.status}"><header><h3>${TITLES[i.scenario]||i.scenario}</h3><span class="id">${i.id}</span><span class="badge">${LABELS[i.status]}</span></header><ol class="tl">${tl}</ol><div class="cols">${patch}<section>${before}${after}</section></div>${bar}</article>`;
+}
+
+function render(s){
+  $("#s-delivered").textContent=s.stats.delivered;
+  $("#s-healed").textContent=s.stats.healed;
+  $("#s-escalated").textContent=s.stats.escalated;
+  $("#mode").textContent=s.mode;
+  const live=s.incidents.some(i=>["detected","diagnosed","patched"].includes(i.status));
+  const wait=s.incidents.some(i=>i.status==="awaiting_approval");
+  health=live?"fail":wait?"wait":(s.incidents[0]&&s.incidents[0].status==="escalated")?"dead":"ok";
+  $("#plabel").textContent=TEXT[health];$("#plabel").style.color=COL[health];
+  $("#list").innerHTML=s.incidents.length?s.incidents.map(incident).join(""):
+    `<div class="empty">No incidents yet. Use the buttons on the left to break the pipeline.</div>`;
+  if(reduce)draw();
+}
+async function poll(){
+  try{const t=await(await fetch("/api/state")).text();if(t!==last){last=t;render(JSON.parse(t))}}catch(e){}
+}
+async function post(url){await fetch(url,{method:"POST"});poll()}
+poll();setInterval(poll,700);draw();
+</script>
+</body>
+</html>
