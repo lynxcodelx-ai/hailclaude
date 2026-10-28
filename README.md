@@ -3,6 +3,8 @@
 > **Problem Statement 04 — AI Engineering / Intelligent Monitoring**  
 > Autonomous error detection, root-cause diagnosis, and automated patch execution for mission-critical workflows.
 
+🌐 **Live Demo**: [https://7-red-alpha.vercel.app/](https://7-red-alpha.vercel.app/)
+
 ---
 
 ## Overview
